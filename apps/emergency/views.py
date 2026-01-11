@@ -140,7 +140,7 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
             try:
                 from apps.emergency.tasks import process_emergency_dispatch
                 # Enqueue Celery task
-                process_emergency_dispatch.delay(str(emergency.id))
+                process_emergency_dispatch(str(emergency.id))
                 dispatch_status = 'queued'
                 emergency.metadata['dispatch_queued_at'] = timezone.now().isoformat()
                 emergency.save(update_fields=['metadata', 'updated_at'])

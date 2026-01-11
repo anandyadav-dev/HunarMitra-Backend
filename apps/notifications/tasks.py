@@ -1,17 +1,15 @@
 """
-Celery tasks for Notifications app.
+Celery tasks for Notifications app but now running synchronously.
 """
 import logging
 import requests
-from celery import shared_task
 from django.conf import settings
 from .models import Notification
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_push_notification(self, notification_id):
+def send_push_notification(notification_id):
     """
     Send push notification via FCM (Firebase Cloud Messaging).
     
@@ -116,7 +114,7 @@ def send_push_notification(self, notification_id):
             pass
         
         # Retry the task
-        raise self.retry(exc=exc)
+        return {'status': 'error', 'error': str(exc)}
         
     except Exception as exc:
         logger.error(f"Unexpected error sending push notification {notification_id}: {exc}", exc_info=True)
@@ -131,7 +129,6 @@ def send_push_notification(self, notification_id):
         return {'status': 'error', 'error': str(exc)}
 
 
-@shared_task
 def send_notification(user_id, title, message, **kwargs):
     """Legacy task - wrapper for send_push_notification."""
     from .models import Notification
@@ -147,13 +144,12 @@ def send_notification(user_id, title, message, **kwargs):
     )
     
     if notification.channel == Notification.CHANNEL_PUSH:
-        send_push_notification.delay(notification.id)
+        send_push_notification(notification.id)
     
     return str(notification.id)
 
 
-@shared_task(bind=True, max_retries=None)  # We handle retries manually per push
-def send_push_batch(self, outgoing_push_ids):
+def send_push_batch(outgoing_push_ids):
     """
     Send push notifications to FCM for a batch of OutgoingPush records.
     New implementation using Device model and OutgoingPush tracking.
@@ -250,7 +246,10 @@ def send_push_batch(self, outgoing_push_ids):
                         # Retry if attempts remaining
                         if push.attempts < settings.FCM_MAX_RETRIES:
                             push.save(update_fields=['attempts', 'last_attempt_at', 'provider_response', 'updated_at'])
-                            raise self.retry(countdown=2 ** push.attempts)
+                            # raise self.retry(countdown=2 ** push.attempts)
+                            # NO RETRY in Sync Mode
+                            logger.warning(f"Soft failure for push {push.id}, retry skipped in sync mode")
+                            failed_count += 1
                         else:
                             push.status = OutgoingPush.STATUS_FAILED
                             failed_count += 1
@@ -276,7 +275,9 @@ def send_push_batch(self, outgoing_push_ids):
                 # Transient failure - retry
                 if push.attempts < settings.FCM_MAX_RETRIES:
                     push.save(update_fields=['attempts', 'last_attempt_at', 'provider_response', 'updated_at'])
-                    raise self.retry(countdown=2 ** push.attempts)
+                    # raise self.retry(countdown=2 ** push.attempts)
+                    logger.warning(f"Server error for push {push.id}, retry skipped in sync mode")
+                    failed_count += 1
                 else:
                     push.status = OutgoingPush.STATUS_FAILED
                     push.save(update_fields=['status', 'attempts', 'last_attempt_at', 'provider_response', 'updated_at'])
@@ -289,7 +290,9 @@ def send_push_batch(self, outgoing_push_ids):
             
             if push.attempts < settings.FCM_MAX_RETRIES:
                 push.save(update_fields=['attempts', 'last_attempt_at', 'provider_response', 'updated_at'])
-                raise self.retry(exc=exc, countdown=2 ** push.attempts)
+                # raise self.retry(exc=exc, countdown=2 ** push.attempts)
+                logger.warning(f"Request exception for push {push.id}: {exc}, retry skipped")
+                failed_count += 1
             else:
                 push.status = OutgoingPush.STATUS_FAILED
                 push.save(update_fields=['status', 'attempts', 'last_attempt_at', 'provider_response', 'updated_at'])
@@ -351,4 +354,5 @@ def enqueue_push_for_notification(notification):
     
     for i in range(0, len(push_ids), batch_size):
         batch = push_ids[i:i+batch_size]
-        send_push_batch.delay(batch)
+        # send_push_batch.delay(batch)
+        send_push_batch(batch)  # Call synchronously
