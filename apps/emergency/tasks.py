@@ -1,14 +1,12 @@
 """
-Celery tasks for emergency request processing.
+Celery tasks for emergency request processing but now running synchronously.
 """
-from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 from decimal import Decimal
 
 
-@shared_task(bind=True, max_retries=3)
-def process_emergency_dispatch(self, emergency_id):
+def process_emergency_dispatch(emergency_id):
     """
     Process emergency dispatch - find nearby workers and notify them.
     
@@ -135,7 +133,6 @@ def process_emergency_dispatch(self, emergency_id):
     }
 
 
-@shared_task
 def check_emergency_timeouts():
     """
     Check for emergency requests that haven't been accepted within timeout period.

@@ -1,19 +1,17 @@
 """
-Celery tasks for users app.
+Celery tasks for users app but now running synchronously.
 """
 
 import logging
-from celery import shared_task
 from django.conf import settings
 from twilio.rest import Client
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3)
-def send_sms(self, to, body):
+def send_sms(to, body):
     """
-    Send SMS asynchronously using configured provider.
+    Send SMS synchronously using configured provider.
     
     Args:
         to (str): Recipient phone number
@@ -58,8 +56,8 @@ def send_sms(self, to, body):
             
         except Exception as e:
             logger.error(f"Twilio SMS failed: {str(e)}")
-            # Retry in 60s, 120s, 180s
-            raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
+            # No retry possible in sync mode without blocking
+            return {'status': 'failed', 'error': str(e)}
             
     else:
         error_msg = f"Unknown SMS Provider: {provider}"

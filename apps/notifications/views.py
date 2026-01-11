@@ -170,7 +170,7 @@ class CreateTestNotificationView(APIView):
             # Optionally trigger push notification task
             if notification.channel == Notification.CHANNEL_PUSH:
                 from .tasks import send_push_notification
-                send_push_notification.delay(notification.id)
+                send_push_notification(notification.id)
             
             return Response(
                 NotificationSerializer(notification).data,

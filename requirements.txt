@@ -7,17 +7,12 @@ django-cors-headers>=4.3.0
 gunicorn>=21.2.0
 drf-spectacular>=0.27.0
 
-# Database (PostgreSQL for Render)
-psycopg2-binary>=2.9.9
+# Database (MySQL for Production)
+mysqlclient>=2.2.0
 dj-database-url>=2.1.0
 
 # Static files
 whitenoise>=6.6.0
-
-# Celery (required - used in code, but runs in eager mode)
-celery>=5.3.0
-django-celery-beat>=2.5.0
-django-redis>=5.4.0
 
 # Storage (optional)
 django-storages>=1.14.0

@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'rest_framework_simplejwt.token_blacklist',
-    'django_celery_beat',
     
     # Local apps
     'apps.users',
@@ -78,6 +77,7 @@ except ImportError:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -216,30 +216,12 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://127.0.0.1:3000',
 ])
 
-# Celery Configuration
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/1')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/2')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
-
-# Redis Configuration
-REDIS_URL = env('REDIS_URL', default='redis://localhost:6379/0')
-
-# Cache Configuration
+# Cache Configuration - Local Memory for simple setup
 CACHES = {
     'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': REDIS_URL,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-        'KEY_PREFIX': 'hunarmitra',
-        'TIMEOUT': 300,
-    },
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
 }
 
 # OTP Configuration
@@ -301,14 +283,9 @@ FCM_SERVER_KEY = env('FCM_SERVER_KEY', default='')
 if 'channels' in INSTALLED_APPS:
     ASGI_APPLICATION = 'hunarmitra.asgi.application'
     
-    # Channel layers - use Redis in production, in-memory for dev/testing
+    # Channel layers - In-memory for development
     CHANNEL_LAYERS = {
         'default': {
-            'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {
-                "hosts": [env('REDIS_URL', default='redis://localhost:6379/0')],
-            },
-        } if env('REDIS_URL', default=None) and not env.bool('DJANGO_TEST', default=False) else {
             'BACKEND': 'channels.layers.InMemoryChannelLayer'
         }
     }

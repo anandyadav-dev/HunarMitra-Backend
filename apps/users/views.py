@@ -80,7 +80,7 @@ class RequestOTPView(views.APIView):
         
         # 4. Send SMS asynchronously
         # For dev mode, the task will log it. In prod, Twilio sends it.
-        send_sms.delay(to=phone, body=f"Your HunarMitra OTP is: {otp}")
+        send_sms(to=phone, body=f"Your HunarMitra OTP is: {otp}")
         
         # 5. Prepare Response
         response_data = {

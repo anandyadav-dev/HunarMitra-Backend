@@ -55,8 +55,7 @@ COPY --from=builder /root/.local /home/django/.local
 COPY --chown=django:django . .
 
 # Copy and set entrypoint
-COPY --chown=django:django entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+
 
 # Add local bin to PATH
 ENV PATH=/home/django/.local/bin:$PATH
@@ -68,7 +67,7 @@ USER django
 EXPOSE 8000
 
 # Set entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
+
 
 # Default command
 CMD ["gunicorn", "hunarmitra.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
