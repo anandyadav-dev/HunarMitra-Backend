@@ -82,11 +82,17 @@ class RequestOTPView(views.APIView):
         # For dev mode, the task will log it. In prod, Twilio sends it.
         send_sms(to=phone, body=f"Your HunarMitra OTP is: {otp}")
         
-        # 5. Prepare Response
+        # 5. Check if user exists
+        is_existing_user = User.objects.filter(phone=phone).exists()
+        
+        # 6. Prepare Response
+        message = f"Welcome back! OTP sent to {phone}" if is_existing_user else f"OTP sent to {phone}"
+        
         response_data = {
             "request_id": request_id,
             "ttl": OTP_TTL_SECONDS,
-            "message": f"OTP sent to {phone}"
+            "message": message,
+            "is_existing_user": is_existing_user
         }
         
         # In DEV mode only, return OTP in response for easier testing

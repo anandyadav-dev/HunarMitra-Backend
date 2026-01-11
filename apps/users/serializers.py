@@ -46,6 +46,7 @@ class RequestOTPResponseSerializer(serializers.Serializer):
     request_id = serializers.UUIDField()
     ttl = serializers.IntegerField()
     message = serializers.CharField()
+    is_existing_user = serializers.BooleanField()
     # dev_otp only included in dev mode, handled by view logic
 
 
