@@ -22,6 +22,17 @@ services:
     networks:
       - hunarmitra_network
 
+  # Redis Cache
+  redis:
+    image: redis:alpine
+    container_name: hunarmitra_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hunarmitra_network
+
   # Django Application
   app:
     build:
@@ -33,6 +44,7 @@ services:
       - .env
     environment:
       - DJANGO_SETTINGS_MODULE=hunarmitra.settings.dev
+      - REDIS_URL=redis://redis:6379/1
     ports:
       - "8000:8000"
     volumes:
@@ -42,11 +54,14 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - hunarmitra_network
 
 volumes:
   mysql_data:
+  redis_data:
   static_volume:
   media_volume:
 
