@@ -170,6 +170,13 @@ class VerifyOTPView(views.APIView):
             # 4. Generate Tokens
             refresh = RefreshToken.for_user(user)
             
+            # 5. Check if profile exists based on role
+            profile_exists = False
+            if hasattr(user, 'worker_profile') and user.role == 'worker':
+                profile_exists = True
+            elif hasattr(user, 'contractor_profile') and user.role == 'contractor':
+                profile_exists = True
+            
             return Response({
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
@@ -181,7 +188,8 @@ class VerifyOTPView(views.APIView):
                     "last_name": user.last_name or "",
                     "is_phone_verified": user.is_phone_verified
                 },
-                "is_new_user": created
+                "is_new_user": created,
+                "profile_exists": profile_exists
             }, status=status.HTTP_200_OK)
             
         else:
