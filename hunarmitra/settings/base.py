@@ -216,11 +216,11 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'http://127.0.0.1:3000',
 ])
 
-# Cache Configuration - Local Memory for simple setup
+# Cache Configuration - Redis
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': env('REDIS_URL', default='redis://redis:6379/1'),
     }
 }
 

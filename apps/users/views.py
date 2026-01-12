@@ -21,12 +21,12 @@ from .serializers import (
 from .otp_utils import (
     generate_otp,
     hash_otp,
-    store_otp_in_redis,
     verify_otp,
+)
+from .redis_service import (
+    store_otp_in_redis,
     get_otp_from_redis,
-    delete_otp_from_redis,
-    check_rate_limit,
-    increment_rate_limit,
+    delete_otp_from_redis
 )
 from .tasks import send_sms
 
@@ -55,13 +55,13 @@ class RequestOTPView(views.APIView):
         phone = serializer.validated_data['phone']
         role = serializer.validated_data.get('role', 'worker')
         
-        # 1. Check rate limits
-        allowed, reason = check_rate_limit(phone)
-        if not allowed:
-            return Response(
-                {"error": reason},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
+        # 1. Check rate limits (Disabled)
+        # allowed, reason = check_rate_limit(phone)
+        # if not allowed:
+        #     return Response(
+        #         {"error": reason},
+        #         status=status.HTTP_429_TOO_MANY_REQUESTS
+        #     )
             
         # 2. Generate OTP and Request ID
         otp = generate_otp(length=4)
@@ -76,22 +76,28 @@ class RequestOTPView(views.APIView):
         
         # 3. Store in Redis
         store_otp_in_redis(request_id, phone, hashed_otp, role=role, ttl=OTP_TTL_SECONDS)
-        increment_rate_limit(phone)
+        # increment_rate_limit(phone) # Rate limiting temporarily disabled as per request
         
         # 4. Send SMS asynchronously
         # For dev mode, the task will log it. In prod, Twilio sends it.
         send_sms(to=phone, body=f"Your HunarMitra OTP is: {otp}")
         
-        # 5. Prepare Response
+        # 5. Check if user exists
+        is_existing_user = User.objects.filter(phone=phone).exists()
+        
+        # 6. Prepare Response
+        message = f"Welcome back! OTP sent to {phone}" if is_existing_user else f"OTP sent to {phone}"
+        
         response_data = {
             "request_id": request_id,
             "ttl": OTP_TTL_SECONDS,
-            "message": f"OTP sent to {phone}"
+            "message": message,
+            "is_existing_user": is_existing_user
         }
         
         # In DEV mode only, return OTP in response for easier testing
-        if settings.DEBUG:
-             response_data["dev_otp"] = otp
+        # if settings.DEBUG:
+        #      response_data["dev_otp"] = otp
              
         return Response(response_data, status=status.HTTP_200_OK)
 
@@ -164,6 +170,13 @@ class VerifyOTPView(views.APIView):
             # 4. Generate Tokens
             refresh = RefreshToken.for_user(user)
             
+            # 5. Check if profile exists based on role
+            profile_exists = False
+            if hasattr(user, 'worker_profile') and user.role == 'worker':
+                profile_exists = True
+            elif hasattr(user, 'contractor_profile') and user.role == 'contractor':
+                profile_exists = True
+            
             return Response({
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
@@ -175,7 +188,8 @@ class VerifyOTPView(views.APIView):
                     "last_name": user.last_name or "",
                     "is_phone_verified": user.is_phone_verified
                 },
-                "is_new_user": created
+                "is_new_user": created,
+                "profile_exists": profile_exists
             }, status=status.HTTP_200_OK)
             
         else:

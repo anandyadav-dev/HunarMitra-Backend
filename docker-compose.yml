@@ -1,52 +1,20 @@
 version: '3.8'
 
 services:
-  # MySQL Database
-  mysql:
-    image: mysql:8.0
-    container_name: hunarmitra_mysql
-    environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-hunarmitra}
-      MYSQL_USER: ${MYSQL_USER:-hunarmitra_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hunarmitra_password}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+  # Redis Cache
+  redis:
+    image: redis:alpine
+    container_name: hunarmitra_redis
     ports:
-      - "3307:3306"
+      - "6379:6379"
     volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - hunarmitra_network
-
-  # Django Application
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: hunarmitra_app
-    command: gunicorn hunarmitra.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --reload
-    env_file:
-      - .env
-    environment:
-      - DJANGO_SETTINGS_MODULE=hunarmitra.settings.dev
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
-    depends_on:
-      mysql:
-        condition: service_healthy
+      - redis_data:/data
     networks:
       - hunarmitra_network
 
 volumes:
   mysql_data:
+  redis_data:
   static_volume:
   media_volume:
 
