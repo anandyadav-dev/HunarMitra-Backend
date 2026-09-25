@@ -6,8 +6,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     DATABASE_URL: str = Field(
-        default="sqlite:///./hunarmitra.db",
-        description="Database connection URL. Defaults to a local SQLite file for development when MySQL is unavailable."
+        default="mysql+pymysql://root:password@localhost:3306/hunarmitra",
+        description="Database connection URL."
     )
     
     JWT_SECRET_KEY: str = Field(

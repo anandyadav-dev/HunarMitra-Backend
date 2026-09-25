@@ -17,7 +17,7 @@ def get_nearby_workers(
     lat: float = Query(..., description="Latitude of user's current location"),
     lng: float = Query(..., description="Longitude of user's current location"),
     category: Optional[str] = Query(None, description="Category of worker (e.g. Plumber, Electrician)"),
-    radius_km: float = Query(10.0, description="Radius within which to search, in kilometers"),
+    radius_km: float = Query(100.0, description="Radius within which to search, in kilometers"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.require_customer)
 ):
