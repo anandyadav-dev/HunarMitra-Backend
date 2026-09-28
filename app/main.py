@@ -1,5 +1,7 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
@@ -41,6 +43,22 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include the unified V1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    # Format the error message to be human readable
+    error_msg = "Validation Error"
+    if errors:
+        first_error = errors[0]
+        loc = " -> ".join([str(l) for l in first_error.get("loc", [])])
+        msg = first_error.get("msg", "")
+        error_msg = f"{loc}: {msg}"
+    
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": error_msg}
+    )
 
 @app.get("/", tags=["Root"])
 def root_endpoint():

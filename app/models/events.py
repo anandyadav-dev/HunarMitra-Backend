@@ -7,11 +7,14 @@ import uuid
 
 def generate_slug(target, value, oldvalue, initiator):
     if value:
-        # Generate slug and append a short uuid to ensure uniqueness if needed
-        # Or just simple slugify
-        target.slug = slugify(value)
-        if not target.slug:
-            target.slug = str(uuid.uuid4())[:8]
+        base_slug = slugify(value)
+        if not base_slug:
+            base_slug = "unknown"
+            
+        if isinstance(target, User):
+            target.slug = f"{base_slug}-{str(uuid.uuid4())[:6]}"
+        else:
+            target.slug = base_slug
 
 event.listen(User.full_name, 'set', generate_slug)
 event.listen(Role.name, 'set', generate_slug)

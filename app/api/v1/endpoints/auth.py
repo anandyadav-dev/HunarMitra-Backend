@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.crud.crud_user import user as user_crud
 from app.models.worker import Worker
+from app.models.contractor import Contractor
 from app.schemas.user import UserCreate, UserResponse, OTPRequest, OTPVerify
 from app.schemas.token import Token
 from app.services import otp as otp_service
@@ -46,9 +47,30 @@ def register(obj_in: UserCreate, db: Session = Depends(deps.get_db)):
             category="Uncategorized",
             pricing_per_hour=Decimal("0.00"),
             experience_years=0,
-            availability_status=False
+            availability_status="unavailable"
         )
         db.add(worker_profile)
+        db.commit()
+        db.refresh(new_user)
+        
+    is_contractor = False
+    for role in new_user.roles:
+        curr = role
+        while curr:
+            if curr.name.lower() == "contractor":
+                is_contractor = True
+                break
+            curr = curr.parent
+        if is_contractor:
+            break
+            
+    if is_contractor:
+        contractor_profile = Contractor(
+            user_id=new_user.id,
+            company_name="Pending Details",
+            experience_years=0
+        )
+        db.add(contractor_profile)
         db.commit()
         db.refresh(new_user)
         
