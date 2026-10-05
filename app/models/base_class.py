@@ -1,10 +1,12 @@
 import uuid
 from typing import Any
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
-from sqlalchemy import Uuid
+from sqlalchemy import Uuid, Boolean
 
 class Base(DeclarativeBase):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     
     # Automatically generate table name from class name
     @declared_attr.directive

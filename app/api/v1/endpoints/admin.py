@@ -173,10 +173,11 @@ def list_users(
     role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     is_verified: Optional[bool] = Query(None),
+    is_deleted: Optional[bool] = Query(False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = db.query(User)
+    query = db.query(User).filter(User.is_deleted == is_deleted)
     
     if is_verified is not None:
         query = query.filter(User.is_verified == is_verified)
@@ -205,7 +206,9 @@ def list_users(
             "is_verified": u.is_verified,
             "created_at": u.created_at.isoformat(),
             "roles": [r.name for r in u.roles],
-            "wallet_balance": float(u.wallet.balance) if u.wallet else 0.0
+            "wallet_balance": float(u.wallet.balance) if u.wallet else 0.0,
+            "is_active": u.is_active,
+            "is_deleted": u.is_deleted
         })
         
     return {"total": total, "items": result}
@@ -264,6 +267,8 @@ def get_user_details(
         "full_name": user_obj.full_name,
         "language_preference": user_obj.language_preference,
         "is_verified": user_obj.is_verified,
+        "is_active": user_obj.is_active,
+        "is_deleted": user_obj.is_deleted,
         "created_at": user_obj.created_at.isoformat(),
         "roles": [r.name for r in user_obj.roles],
         "wallet": {
@@ -302,6 +307,22 @@ def update_user_details(
     return {"message": "User details updated successfully"}
 
 
+@router.put("/admin/users/{id}/status")
+def update_user_status(
+    id: UUID,
+    is_active: bool = Body(..., embed=True),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    user_obj = db.get(User, id)
+    if not user_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    if user_obj.id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot suspend yourself.")
+    user_obj.is_active = is_active
+    db.commit()
+    return {"message": "User status updated successfully"}
+
 @router.delete("/admin/users/{id}")
 def delete_user(
     id: UUID,
@@ -316,9 +337,49 @@ def delete_user(
     if user_obj.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete yourself.")
         
-    db.delete(user_obj)
+    user_obj.is_deleted = True
+    if user_obj.worker_profile:
+        user_obj.worker_profile.is_deleted = True
+    if user_obj.contractor_profile:
+        user_obj.contractor_profile.is_deleted = True
+    if user_obj.wallet:
+        user_obj.wallet.is_deleted = True
+        
     db.commit()
     return {"message": "User deleted successfully"}
+
+
+@router.delete("/admin/users/{id}/permanent")
+def delete_user_permanent(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    user_obj = db.get(User, id)
+    if not user_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    
+    if user_obj.id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot permanently delete yourself.")
+        
+    db.delete(user_obj)
+    db.commit()
+    return {"message": "User permanently deleted."}
+
+
+@router.put("/admin/users/{id}/restore")
+def restore_user(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    user_obj = db.get(User, id)
+    if not user_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    
+    user_obj.is_deleted = False
+    db.commit()
+    return {"message": "User restored successfully."}
 
 
 class AddRoleRequest(BaseModel):
@@ -562,10 +623,11 @@ def list_workers(
     kyc_status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    is_deleted: Optional[bool] = Query(False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = db.query(Worker).join(User)
+    query = db.query(Worker).join(User).filter(Worker.is_deleted == is_deleted)
     
     if kyc_status:
         query = query.filter(Worker.kyc_status == kyc_status)
@@ -598,6 +660,8 @@ def list_workers(
             "availability_status": w.availability_status,
             "kyc_status": w.kyc_status.value,
             "rejection_reason": w.rejection_reason,
+            "is_active": w.is_active,
+            "is_deleted": w.is_deleted,
             "user": {
                 "id": w.user.id,
                 "full_name": w.user.full_name,
@@ -607,6 +671,65 @@ def list_workers(
         })
         
     return {"total": total, "items": result}
+
+
+@router.put("/admin/workers/{id}/status")
+def update_worker_status(
+    id: UUID,
+    is_active: bool = Body(..., embed=True),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    worker_obj = db.get(Worker, id)
+    if not worker_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Worker not found.")
+    worker_obj.is_active = is_active
+    db.commit()
+    return {"message": "Worker status updated successfully"}
+
+@router.delete("/admin/workers/{id}")
+def delete_worker(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    worker_obj = db.get(Worker, id)
+    if not worker_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Worker not found.")
+    
+    worker_obj.is_deleted = True
+    db.commit()
+    return {"message": "Worker deleted successfully"}
+
+
+@router.delete("/admin/workers/{id}/permanent")
+def delete_worker_permanent(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    worker_obj = db.get(Worker, id)
+    if not worker_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Worker not found.")
+    
+    db.delete(worker_obj)
+    db.commit()
+    return {"message": "Worker permanently deleted."}
+
+
+@router.put("/admin/workers/{id}/restore")
+def restore_worker(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    worker_obj = db.get(Worker, id)
+    if not worker_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Worker not found.")
+    
+    worker_obj.is_deleted = False
+    db.commit()
+    return {"message": "Worker restored successfully."}
 
 
 @router.get("/admin/workers/{id}")
@@ -649,6 +772,8 @@ def get_worker_details(
         "aadhaar_image_back": worker_obj.aadhaar_image_back,
         "kyc_status": worker_obj.kyc_status.value,
         "rejection_reason": worker_obj.rejection_reason,
+        "is_active": worker_obj.is_active,
+        "is_deleted": worker_obj.is_deleted,
         "user": {
             "id": worker_obj.user.id,
             "full_name": worker_obj.user.full_name,
@@ -697,10 +822,11 @@ def list_contractors(
     limit: int = Query(20, ge=1),
     kyc_status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    is_deleted: Optional[bool] = Query(False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = db.query(Contractor).join(User)
+    query = db.query(Contractor).join(User).filter(Contractor.is_deleted == is_deleted)
     
     if kyc_status:
         query = query.filter(Contractor.kyc_status == kyc_status)
@@ -727,6 +853,8 @@ def list_contractors(
             "pan_number": c.pan_number,
             "kyc_status": c.kyc_status.value,
             "rejection_reason": c.rejection_reason,
+            "is_active": c.is_active,
+            "is_deleted": c.is_deleted,
             "user": {
                 "id": c.user.id,
                 "full_name": c.user.full_name,
@@ -736,6 +864,65 @@ def list_contractors(
         })
         
     return {"total": total, "items": result}
+
+
+@router.put("/admin/contractors/{id}/status")
+def update_contractor_status(
+    id: UUID,
+    is_active: bool = Body(..., embed=True),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    contractor_obj = db.get(Contractor, id)
+    if not contractor_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contractor not found.")
+    contractor_obj.is_active = is_active
+    db.commit()
+    return {"message": "Contractor status updated successfully"}
+
+@router.delete("/admin/contractors/{id}")
+def delete_contractor(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    contractor_obj = db.get(Contractor, id)
+    if not contractor_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contractor not found.")
+    
+    contractor_obj.is_deleted = True
+    db.commit()
+    return {"message": "Contractor deleted successfully"}
+
+
+@router.delete("/admin/contractors/{id}/permanent")
+def delete_contractor_permanent(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    contractor_obj = db.get(Contractor, id)
+    if not contractor_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contractor not found.")
+    
+    db.delete(contractor_obj)
+    db.commit()
+    return {"message": "Contractor permanently deleted."}
+
+
+@router.put("/admin/contractors/{id}/restore")
+def restore_contractor(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    contractor_obj = db.get(Contractor, id)
+    if not contractor_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contractor not found.")
+    
+    contractor_obj.is_deleted = False
+    db.commit()
+    return {"message": "Contractor restored successfully."}
 
 
 @router.get("/admin/contractors/{id}")
@@ -758,6 +945,8 @@ def get_contractor_details(
         "profile_picture": contractor_obj.profile_picture,
         "kyc_status": contractor_obj.kyc_status.value,
         "rejection_reason": contractor_obj.rejection_reason,
+        "is_active": contractor_obj.is_active,
+        "is_deleted": contractor_obj.is_deleted,
         "user": {
             "id": contractor_obj.user.id,
             "full_name": contractor_obj.user.full_name,
