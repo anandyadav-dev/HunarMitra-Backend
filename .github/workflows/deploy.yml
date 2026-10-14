@@ -26,7 +26,6 @@ jobs:
 
             echo "📥 [2/5] Fetching and syncing production branch..."
             git fetch origin production
-            git checkout production || git checkout -b production origin/production
             git reset --hard origin/production
 
             echo "📦 [3/5] Installing/verifying dependencies..."
