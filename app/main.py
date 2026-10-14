@@ -1,7 +1,9 @@
 import os
+from datetime import datetime, timezone
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
@@ -25,7 +27,7 @@ except Exception as e:
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Backend API for Hunar Mitra (Customers) and Hunar Mitra Partner (Workers) marketplace.",
-    version="1.0.0",
+    version="2.0.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
@@ -63,10 +65,27 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.get("/", tags=["Root"])
 def root_endpoint():
     """
-    General service health check entrypoint.
+    General service entrypoint and health status.
     """
     return {
         "status": "online",
-        "message": f"Welcome to {settings.PROJECT_NAME}",
-        "documentation": "/docs"
+        "service": settings.PROJECT_NAME,
+        "version": "2.0.0",
+        "ci_cd": "GitHub Actions Active",
+        "documentation": "/docs",
+        "server_time": datetime.now(timezone.utc).isoformat()
     }
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    """
+    Dedicated health check endpoint for monitoring & automated deployments.
+    """
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "version": "2.0.0",
+        "ci_cd": "active",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
