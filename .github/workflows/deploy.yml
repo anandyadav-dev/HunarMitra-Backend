@@ -32,7 +32,8 @@ jobs:
             venv/bin/pip install -r requirements.txt
 
             echo "🔄 [4/5] Running database migrations & seed scripts..."
-            venv/bin/python app/update_legal_docs.py || true
+            PYTHONPATH=. venv/bin/python -m app.update_legal_docs || true
+
 
             echo "♻️ [5/5] Restarting HunarMitra PM2 Service..."
             pm2 restart hunarmitra-backend
