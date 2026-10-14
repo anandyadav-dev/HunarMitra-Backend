@@ -17,6 +17,7 @@ from app.models.contractor import Contractor
 from app.models.booking import Booking, BookingStatus
 from app.models.wallet import Wallet
 from app.models.service import Service
+from app.models.legal_document import LegalDocument
 
 def seed_database():
     db = SessionLocal()
@@ -341,6 +342,26 @@ def seed_database():
                 db.add(booking)
             db.commit()
             print("Successfully seeded marketplace bookings.")
+
+        # 9. Seed Default Legal Documents (Privacy Policy & Terms and Conditions)
+        from app.update_legal_docs import privacy_policy_content, terms_and_conditions_content
+        privacy_policy = db.query(LegalDocument).filter(LegalDocument.slug == "privacy-policy", LegalDocument.is_deleted == False).first()
+        if not privacy_policy:
+            db.add(LegalDocument(title="Privacy Policy", slug="privacy-policy", content=privacy_policy_content))
+            db.commit()
+            print("Seeded comprehensive Privacy Policy document.")
+        else:
+            privacy_policy.content = privacy_policy_content
+            db.commit()
+
+        terms_doc = db.query(LegalDocument).filter(LegalDocument.slug == "terms-and-conditions", LegalDocument.is_deleted == False).first()
+        if not terms_doc:
+            db.add(LegalDocument(title="Terms and Conditions", slug="terms-and-conditions", content=terms_and_conditions_content))
+            db.commit()
+            print("Seeded comprehensive Terms and Conditions document.")
+        else:
+            terms_doc.content = terms_and_conditions_content
+            db.commit()
 
         db.commit()
         print("Database Seeding Completed Successfully!")

@@ -5,3 +5,6 @@ __pycache__/
 *.db
 tmp_mazdoor.db
 uploads/
+*.ppk
+*.pem
+*deploy_key*

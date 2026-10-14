@@ -16,7 +16,9 @@ from app.models.booking import Booking, BookingStatus
 from app.models.wallet import Wallet
 from app.models.service import Service
 from app.models.work_proof import WorkProof
+from app.models.legal_document import LegalDocument
 from app.schemas.service import ServiceCreate, ServiceUpdate
+from app.schemas.legal_document import LegalDocumentCreate, LegalDocumentUpdate, LegalDocumentResponse
 
 router = APIRouter()
 require_admin = deps.RoleChecker(["admin"])
@@ -1309,3 +1311,92 @@ def adjust_wallet_balance(
         "message": f"Successfully {adj_type}ed balance with {float(amount)}",
         "new_balance": float(wallet_obj.balance)
     }
+
+
+# ==========================================
+# Legal Documents (Privacy Policy & Terms) Admin CRUD
+# ==========================================
+
+@router.get("/admin/legal-documents", response_model=List[LegalDocumentResponse])
+def get_admin_legal_documents(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Get all legal documents (including inactive ones if not permanently deleted).
+    """
+    return db.query(LegalDocument).filter(LegalDocument.is_deleted == False).order_by(LegalDocument.slug.asc()).all()
+
+
+@router.post("/admin/legal-documents", response_model=LegalDocumentResponse, status_code=status.HTTP_201_CREATED)
+def create_legal_document(
+    doc_in: LegalDocumentCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Create a new legal document (e.g., privacy-policy, terms-and-conditions).
+    """
+    slug = doc_in.slug.strip().lower()
+    existing = db.query(LegalDocument).filter(LegalDocument.slug == slug, LegalDocument.is_deleted == False).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A document with slug '{slug}' already exists."
+        )
+
+    new_doc = LegalDocument(
+        title=doc_in.title.strip(),
+        slug=slug,
+        content=doc_in.content
+    )
+    db.add(new_doc)
+    db.commit()
+    db.refresh(new_doc)
+    return new_doc
+
+
+@router.put("/admin/legal-documents/{id}", response_model=LegalDocumentResponse)
+def update_legal_document(
+    id: UUID,
+    doc_in: LegalDocumentUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Update title or content of an existing legal document.
+    """
+    doc = db.get(LegalDocument, id)
+    if not doc or doc.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal document not found.")
+
+    if doc_in.title is not None:
+        doc.title = doc_in.title.strip()
+    if doc_in.content is not None:
+        doc.content = doc_in.content
+    doc.updated_at = datetime.utcnow()
+
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+@router.delete("/admin/legal-documents/{id}")
+def delete_legal_document(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Soft delete a legal document.
+    """
+    doc = db.get(LegalDocument, id)
+    if not doc or doc.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal document not found.")
+
+    doc.is_deleted = True
+    db.add(doc)
+    db.commit()
+    return {"message": f"Legal document '{doc.title}' deleted successfully."}
+

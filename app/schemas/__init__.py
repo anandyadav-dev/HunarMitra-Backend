@@ -39,3 +39,4 @@ from app.schemas.contractor import (
     ContractorResponse,
     ContractorDetailedResponse,
 )
+from app.schemas.notification import NotificationBase, NotificationCreate, NotificationResponse

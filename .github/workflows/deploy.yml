@@ -1,0 +1,42 @@
+name: Deploy Backend to AWS EC2
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Production EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            echo "🚀 [1/5] Navigating to backend directory..."
+            cd /home/ubuntu/HunarMitra/backend
+
+            echo "📥 [2/5] Fetching and syncing production branch..."
+            git fetch origin production
+            git checkout production || git checkout -b production origin/production
+            git reset --hard origin/production
+
+            echo "📦 [3/5] Installing/verifying dependencies..."
+            venv/bin/pip install -r requirements.txt
+
+            echo "🔄 [4/5] Running database migrations & seed scripts..."
+            venv/bin/python app/update_legal_docs.py || true
+
+            echo "♻️ [5/5] Restarting HunarMitra PM2 Service..."
+            pm2 restart hunarmitra-backend
+
+            echo "✅ Deployment completed successfully!"
+            pm2 status hunarmitra-backend

@@ -28,3 +28,4 @@ class User(Base):
     contractor_profile = relationship("Contractor", back_populates="user", uselist=False, cascade="all, delete-orphan")
     wallet = relationship("Wallet", back_populates="user", uselist=False, cascade="all, delete-orphan")
     bookings_as_customer = relationship("Booking", back_populates="customer", foreign_keys="[Booking.customer_id]")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

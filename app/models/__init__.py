@@ -8,6 +8,9 @@ from app.models.service import Service
 from app.models.booking import Booking, BookingStatus
 from app.models.wallet import Wallet
 from app.models.work_proof import WorkProof
+from app.models.notification import Notification
+
+from app.models.legal_document import LegalDocument
 
 __all__ = [
     "Base",
@@ -21,6 +24,8 @@ __all__ = [
     "BookingStatus",
     "Wallet",
     "WorkProof",
+    "Notification",
+    "LegalDocument",
 ]
 
 import app.models.events
