@@ -46,7 +46,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Include the unified V1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Top-level direct routes for GET /wallet, GET /config/coins, coin packs, payments, and worker reveal/contact APIs
+# Direct route aliases
 from app.api.v1.endpoints import (
     wallet as wallet_endpoint,
     config as config_endpoint,

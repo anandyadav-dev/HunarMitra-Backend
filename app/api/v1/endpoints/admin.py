@@ -177,7 +177,7 @@ def get_dashboard_stats(
     }
 
 
-# ==================== USER MANAGEMENT ====================
+# User Management
 
 @router.get("/admin/users")
 def list_users(
@@ -630,7 +630,7 @@ def delete_role(
     return {"message": f"Role '{role.name}' deleted successfully."}
 
 
-# ==================== WORKER MANAGEMENT ====================
+# Worker Management
 
 @router.get("/admin/workers")
 def list_workers(
@@ -830,7 +830,7 @@ def verify_worker(
     return {"message": f"Worker KYC status set to {status_val}"}
 
 
-# ==================== CONTRACTOR MANAGEMENT ====================
+# Contractor Management
 
 @router.get("/admin/contractors")
 def list_contractors(
@@ -1001,7 +1001,7 @@ def verify_contractor(
     return {"message": f"Contractor KYC status set to {status_val}"}
 
 
-# ==================== BOOKINGS MANAGEMENT ====================
+# Bookings Management
 
 @router.get("/admin/bookings")
 def list_bookings(
@@ -1149,7 +1149,7 @@ def update_booking_status(
     return {"message": f"Booking status updated from {old_status.value} to {new_status.value}"}
 
 
-# ==================== SERVICES MANAGEMENT ====================
+# Services Management
 
 @router.get("/admin/services")
 def list_services(
@@ -1254,7 +1254,7 @@ def delete_service(
     return {"message": "Service deleted successfully"}
 
 
-# ==================== WALLET & FINANCE ====================
+# Wallet & Finance
 
 @router.get("/admin/wallets")
 def list_wallets(
@@ -1492,9 +1492,7 @@ def adjust_wallet_coins(
     }
 
 
-# ==========================================
-# Legal Documents (Privacy Policy & Terms) Admin CRUD
-# ==========================================
+# Legal Documents Management
 
 @router.get("/admin/legal-documents", response_model=List[LegalDocumentResponse])
 def get_admin_legal_documents(
@@ -1580,9 +1578,7 @@ def delete_legal_document(
     return {"message": f"Legal document '{doc.title}' deleted successfully."}
 
 
-# ==========================================
 # Dynamic Coin Pack Management & Order APIs
-# ==========================================
 
 @router.get("/admin/coin-packs", response_model=List[CoinPackResponse])
 def get_all_coin_packs_admin(
@@ -1791,9 +1787,7 @@ def get_admin_order_detail(
     return order
 
 
-# ==========================================
-# System Business Rules Configuration APIs (Task 6)
-# ==========================================
+# System Business Rules Configuration
 
 @router.get("/admin/configs")
 def get_all_business_rules(
@@ -1825,9 +1819,7 @@ def update_business_rules(
     }
 
 
-# ==========================================
-# Automated Reconciliation & Expiry Jobs (Task 8)
-# ==========================================
+# Automated Reconciliation & Expiry Jobs
 
 @router.post("/admin/jobs/reconcile-pending-orders")
 def reconcile_pending_orders(
