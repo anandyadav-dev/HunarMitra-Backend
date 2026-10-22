@@ -4,9 +4,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.crud.crud_user import user as user_crud
+from app.models.user import User
 from app.models.worker import Worker
 from app.models.contractor import Contractor
-from app.schemas.user import UserCreate, UserResponse, OTPRequest, OTPVerify
+from app.schemas.user import UserCreate, UserResponse, OTPRequest, OTPVerify, WalletBriefResponse, UserProfileResponse
 from app.schemas.token import Token
 from app.services import otp as otp_service
 from app.core import security
@@ -202,4 +203,38 @@ def swagger_login(
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+@router.get("/me", response_model=UserProfileResponse, summary="Get current user profile and coin balance")
+def get_current_user_profile(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user)
+):
+    """
+    Returns the authenticated user's profile details along with their wallet coin balances.
+    Ideal for mobile app launch/profile screen to avoid making multiple API calls.
+    """
+    wallet_data = None
+    if current_user.wallet:
+        wallet_data = WalletBriefResponse(
+            purchased_coins=current_user.wallet.purchased_coins,
+            earned_coins=current_user.wallet.earned_coins,
+            total_coins=current_user.wallet.total_coins,
+            balance=current_user.wallet.balance
+        )
+    
+    return UserProfileResponse(
+        id=current_user.id,
+        phone_number=current_user.phone_number,
+        full_name=current_user.full_name,
+        language_preference=current_user.language_preference,
+        city=current_user.city,
+        location_lat=current_user.location_lat,
+        location_lng=current_user.location_lng,
+        is_verified=current_user.is_verified,
+        created_at=current_user.created_at,
+        roles=[r.name for r in current_user.roles],
+        wallet=wallet_data,
+        worker_profile_id=current_user.worker_profile.id if current_user.worker_profile else None,
+        contractor_profile_id=current_user.contractor_profile.id if current_user.contractor_profile else None
+    )
 

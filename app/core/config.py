@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int = 5
     DEBUG_OTP: bool = True
     
+    PAYMENT_GATEWAY_KEY: str = Field(
+        default="rzp_test_hunarmitra_mock",
+        description="Payment gateway client Key ID"
+    )
+    PAYMENT_WEBHOOK_SECRET: str = Field(
+        default="hunarmitra_webhook_secret_key_123",
+        description="Secret key to verify payment gateway webhook signatures"
+    )
+    
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

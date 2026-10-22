@@ -46,6 +46,26 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Include the unified V1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# Direct route aliases
+from app.api.v1.endpoints import (
+    wallet as wallet_endpoint,
+    config as config_endpoint,
+    customer as customer_endpoint,
+    coin_packs as coin_packs_endpoint,
+    payments as payments_endpoint,
+    admin as admin_endpoint,
+    feedback as feedback_endpoint,
+    auth as auth_endpoint
+)
+app.include_router(auth_endpoint.router, prefix="/auth", tags=["Authentication (Direct)"])
+app.include_router(wallet_endpoint.router, tags=["Wallet & Coins (Direct)"])
+app.include_router(config_endpoint.router, tags=["Configuration (Direct)"])
+app.include_router(customer_endpoint.router, tags=["Customer Operations (Direct)"])
+app.include_router(coin_packs_endpoint.router, tags=["Coin Packs & Orders (Direct)"])
+app.include_router(payments_endpoint.router, tags=["Payments & Webhooks (Direct)"])
+app.include_router(admin_endpoint.router, tags=["Admin Operations (Direct)"])
+app.include_router(feedback_endpoint.router, tags=["Feedback & Reviews (Direct)"])
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()

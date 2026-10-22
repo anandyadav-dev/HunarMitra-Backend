@@ -4,6 +4,7 @@ from app.schemas.user import (
     UserCreate, 
     UserUpdate, 
     UserResponse, 
+    UserPublicResponse,
     OTPRequest, 
     OTPVerify
 )
@@ -14,7 +15,11 @@ from app.schemas.worker import (
     WorkerResponse, 
     WorkerDetailedResponse, 
     WorkerNearbyResponse,
-    WorkerStatusUpdate
+    WorkerStatusUpdate,
+    WorkerRevealRequest,
+    WorkerRevealResponse,
+    ContactStatusResponse,
+    EngagementRefundResponse
 )
 from app.schemas.service import (
     ServiceBase, 
@@ -30,7 +35,26 @@ from app.schemas.booking import (
     BookingRespond, 
     BookingComplete
 )
-from app.schemas.wallet import WalletBase, WalletResponse, WalletDeposit
+from app.schemas.wallet import WalletBase, WalletResponse, WalletDeposit, CoinLedgerResponse
+from app.schemas.coin_pack import CoinPackBase, CoinPackCreate, CoinPackUpdate, CoinPackResponse
+from app.schemas.payment import (
+    CreatePaymentOrderRequest,
+    PaymentOrderResponse,
+    VerifyPaymentRequest,
+    VerifyPaymentResponse,
+    PaginatedTransactionsResponse,
+    PaginatedOrdersResponse
+)
+from app.schemas.reward import RewardResponse, UserRewardResponse
+from app.schemas.config import CoinsConfigResponse
+from app.schemas.engagement import EngagementResponse, EngagementCreate
+from app.schemas.feedback import (
+    CreateFeedbackRequest, 
+    FeedbackResponse, 
+    FeedbackPhotoResponse, 
+    PhotoModerationRequest, 
+    FeedbackModerationRequest
+)
 from app.schemas.work_proof import WorkProofBase, WorkProofCreate, WorkProofResponse
 from app.schemas.contractor import (
     ContractorBase,
