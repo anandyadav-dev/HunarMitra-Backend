@@ -53,6 +53,20 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True
 
+class UserPublicResponse(BaseModel):
+    id: UUID4
+    full_name: Optional[str] = Field(None, max_length=100)
+    language_preference: str = "English"
+    city: Optional[str] = Field(None, max_length=100)
+    location_lat: Optional[Decimal] = Field(None, ge=-90, le=90)
+    location_lng: Optional[Decimal] = Field(None, ge=-180, le=180)
+    is_verified: bool
+    created_at: datetime
+    roles: List[RoleResponse] = []
+
+    class Config:
+        from_attributes = True
+
 class OTPRequest(BaseModel):
     phone_number: str = Field(..., max_length=15)
     
@@ -82,3 +96,30 @@ class OTPVerify(BaseModel):
         if not v.isdigit():
             raise ValueError("OTP must contain only digits.")
         return v
+
+class WalletBriefResponse(BaseModel):
+    purchased_coins: int = 0
+    earned_coins: int = 0
+    total_coins: int = 0
+    balance: Decimal = Decimal("0.00")
+
+    class Config:
+        from_attributes = True
+
+class UserProfileResponse(BaseModel):
+    id: UUID4
+    phone_number: str
+    full_name: Optional[str] = None
+    language_preference: str = "English"
+    city: Optional[str] = None
+    location_lat: Optional[Decimal] = None
+    location_lng: Optional[Decimal] = None
+    is_verified: bool
+    created_at: datetime
+    roles: List[str] = []
+    wallet: Optional[WalletBriefResponse] = None
+    worker_profile_id: Optional[UUID4] = None
+    contractor_profile_id: Optional[UUID4] = None
+
+    class Config:
+        from_attributes = True

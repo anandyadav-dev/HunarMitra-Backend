@@ -59,9 +59,9 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
                 )
                 db.add(contractor_profile)
                 
-        # 4. Initialize user's wallet
-        wallet = Wallet(user_id=db_obj.id, balance=0.0)
-        db.add(wallet)
+        # 4. Initialize user's wallet with configurable coin signup bonus
+        from app.services.wallet_service import get_or_create_wallet
+        get_or_create_wallet(db, db_obj.id)
         
         db.commit()
         db.refresh(db_obj)

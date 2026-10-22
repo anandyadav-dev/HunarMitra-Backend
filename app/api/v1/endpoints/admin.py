@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc
@@ -17,8 +17,13 @@ from app.models.wallet import Wallet
 from app.models.service import Service
 from app.models.work_proof import WorkProof
 from app.models.legal_document import LegalDocument
+from app.models.coin_pack import CoinPack
+from app.models.payment_order import PaymentOrder, PaymentOrderStatus
 from app.schemas.service import ServiceCreate, ServiceUpdate
 from app.schemas.legal_document import LegalDocumentCreate, LegalDocumentUpdate, LegalDocumentResponse
+from app.schemas.coin_pack import CoinPackCreate, CoinPackUpdate, CoinPackResponse
+from app.schemas.payment import PaymentOrderResponse, PaginatedOrdersResponse
+from app.services.payment_service import get_paginated_orders
 
 router = APIRouter()
 require_admin = deps.RoleChecker(["admin"])
@@ -32,6 +37,12 @@ class WalletAdjustmentRequest(BaseModel):
     amount: Decimal = Field(..., gt=0, description="Amount to adjust")
     type: str = Field(..., description="Must be 'credit' or 'debit'")
     description: Optional[str] = None
+
+class CoinAdjustmentRequest(BaseModel):
+    amount: int = Field(..., gt=0, description="Amount of coins to adjust (must be positive integer)")
+    action: str = Field(..., description="Must be 'credit' or 'debit'")
+    coin_type: str = Field("purchased", description="Must be 'purchased' or 'earned'")
+    reason: str = Field(..., min_length=3, description="Mandatory audit reason for adjustment")
 
 class BookingStatusUpdateRequest(BaseModel):
     status: BookingStatus = Field(..., description="New status for the booking")
@@ -275,6 +286,9 @@ def get_user_details(
         "roles": [r.name for r in user_obj.roles],
         "wallet": {
             "balance": float(user_obj.wallet.balance) if user_obj.wallet else 0.0,
+            "purchased_coins": user_obj.wallet.purchased_coins if user_obj.wallet else 0,
+            "earned_coins": user_obj.wallet.earned_coins if user_obj.wallet else 0,
+            "total_coins": user_obj.wallet.total_coins if user_obj.wallet else 0,
             "last_updated": user_obj.wallet.last_updated.isoformat() if user_obj.wallet else None
         },
         "worker_profile": worker_profile,
@@ -1269,6 +1283,9 @@ def list_wallets(
             "id": w.id,
             "user_id": w.user_id,
             "balance": float(w.balance),
+            "purchased_coins": w.purchased_coins,
+            "earned_coins": w.earned_coins,
+            "total_coins": w.total_coins,
             "last_updated": w.last_updated.isoformat(),
             "user": {
                 "id": w.user.id,
@@ -1279,6 +1296,108 @@ def list_wallets(
         })
         
     return {"total": total, "items": result}
+
+
+@router.get("/admin/wallets/{id}/details")
+def get_wallet_details_admin(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Returns complete wallet details, coin breakdown, transaction history, payment orders, and contact unlocks.
+    """
+    from app.models.coin_ledger import CoinLedger
+    from app.models.payment_order import PaymentOrder
+    from app.models.engagement import Engagement
+
+    wallet_obj = db.get(Wallet, id)
+    if not wallet_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found.")
+
+    user = wallet_obj.user
+
+    # Coin transactions
+    transactions = db.query(CoinLedger).filter(
+        CoinLedger.wallet_id == wallet_obj.id
+    ).order_by(desc(CoinLedger.created_at)).limit(50).all()
+
+    # Payment orders
+    orders = db.query(PaymentOrder).filter(
+        PaymentOrder.user_id == user.id
+    ).order_by(desc(PaymentOrder.created_at)).limit(50).all()
+
+    # Contact unlocks (engagements)
+    engagements = db.query(Engagement).filter(
+        Engagement.user_id == user.id
+    ).order_by(desc(Engagement.created_at)).limit(50).all()
+
+    return {
+        "wallet": {
+            "id": wallet_obj.id,
+            "user_id": wallet_obj.user_id,
+            "balance": float(wallet_obj.balance),
+            "purchased_coins": wallet_obj.purchased_coins,
+            "earned_coins": wallet_obj.earned_coins,
+            "total_coins": wallet_obj.total_coins,
+            "last_updated": wallet_obj.last_updated.isoformat()
+        },
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "phone_number": user.phone_number,
+            "roles": [r.name for r in user.roles],
+            "is_verified": user.is_verified,
+            "created_at": user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else None
+        },
+        "transactions": [
+            {
+                "id": t.id,
+                "amount": t.amount,
+                "action": t.action,
+                "coin_type": t.coin_type,
+                "transaction_type": t.transaction_type,
+                "balance_purchased_after": t.balance_purchased_after,
+                "balance_earned_after": t.balance_earned_after,
+                "balance_total_after": t.balance_total_after,
+                "reference_id": t.reference_id,
+                "description": t.description,
+                "created_at": t.created_at.isoformat()
+            }
+            for t in transactions
+        ],
+        "orders": [
+            {
+                "id": o.id,
+                "order_id": o.order_id,
+                "pack_name": o.pack_name,
+                "pack_code": o.pack_code,
+                "coins": o.coins,
+                "bonus_coins": o.bonus_coins,
+                "total_coins": o.total_coins,
+                "amount_inr": float(o.amount_inr),
+                "status": o.status,
+                "coins_credited": o.coins_credited,
+                "gateway_payment_id": o.gateway_payment_id,
+                "created_at": o.created_at.isoformat()
+            }
+            for o in orders
+        ],
+        "contacts": [
+            {
+                "id": e.id,
+                "worker_id": e.worker_id,
+                "worker_name": e.worker.user.full_name if (e.worker and e.worker.user) else "Worker",
+                "coins_spent": e.coins_spent,
+                "purchased_coins_spent": e.purchased_coins_spent,
+                "earned_coins_spent": e.earned_coins_spent,
+                "status": e.status,
+                "contact_phone": e.contact_phone,
+                "created_at": e.created_at.isoformat()
+            }
+            for e in engagements
+        ]
+    }
 
 
 @router.post("/admin/wallets/{id}/adjust")
@@ -1310,6 +1429,66 @@ def adjust_wallet_balance(
     return {
         "message": f"Successfully {adj_type}ed balance with {float(amount)}",
         "new_balance": float(wallet_obj.balance)
+    }
+
+
+@router.post("/admin/wallets/{id}/adjust-coins")
+def adjust_wallet_coins(
+    id: UUID,
+    req: CoinAdjustmentRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Manually credit or debit customer coins with a mandatory audit reason.
+    Records the operation directly in the append-only CoinLedger.
+    """
+    from app.services.wallet_service import credit_coins, debit_coins
+
+    wallet_obj = db.get(Wallet, id)
+    if not wallet_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found.")
+
+    action = req.action.upper()
+    c_type = req.coin_type.lower()
+    if c_type not in ("purchased", "earned"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Coin type must be 'purchased' or 'earned'.")
+
+    audit_desc = f"Admin Adjustment ({current_user.phone_number}): {req.reason.strip()}"
+
+    if action == "CREDIT":
+        tx = credit_coins(
+            db=db,
+            wallet=wallet_obj,
+            amount=req.amount,
+            coin_type=c_type,
+            transaction_type="ADMIN_ADJUSTMENT",
+            description=audit_desc,
+            reference_id=f"ADMIN_{current_user.id}"
+        )
+        msg = f"Successfully credited {req.amount} {c_type} coins."
+    elif action == "DEBIT":
+        preferred = "earned_first" if c_type == "earned" else "purchased_first"
+        txs = debit_coins(
+            db=db,
+            wallet=wallet_obj,
+            amount=req.amount,
+            transaction_type="ADMIN_ADJUSTMENT",
+            description=audit_desc,
+            reference_id=f"ADMIN_{current_user.id}",
+            preferred_source=preferred
+        )
+        msg = f"Successfully debited {req.amount} coins."
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'credit' or 'debit'.")
+
+    db.refresh(wallet_obj)
+    return {
+        "message": msg,
+        "purchased_coins": wallet_obj.purchased_coins,
+        "earned_coins": wallet_obj.earned_coins,
+        "total_coins": wallet_obj.total_coins,
+        "balance": float(wallet_obj.balance)
     }
 
 
@@ -1399,4 +1578,339 @@ def delete_legal_document(
     db.add(doc)
     db.commit()
     return {"message": f"Legal document '{doc.title}' deleted successfully."}
+
+
+# ==========================================
+# Dynamic Coin Pack Management & Order APIs
+# ==========================================
+
+@router.get("/admin/coin-packs", response_model=List[CoinPackResponse])
+def get_all_coin_packs_admin(
+    search: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    include_deleted: bool = False,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    List all coin packs with full admin management details.
+    """
+    query = db.query(CoinPack)
+    if not include_deleted:
+        query = query.filter(CoinPack.is_deleted == False)
+    if is_active is not None:
+        query = query.filter(CoinPack.is_active == is_active)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(or_(CoinPack.name.ilike(s), CoinPack.code.ilike(s)))
+        
+    return query.order_by(CoinPack.sort_order.asc(), CoinPack.coins.asc()).all()
+
+
+@router.post("/admin/coin-packs", response_model=CoinPackResponse, status_code=status.HTTP_201_CREATED)
+def create_coin_pack(
+    pack_in: CoinPackCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Create a new dynamic coin pack.
+    """
+    existing = db.query(CoinPack).filter(
+        CoinPack.code == pack_in.code.strip(),
+        CoinPack.is_deleted == False
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Coin pack with code '{pack_in.code}' already exists."
+        )
+        
+    new_pack = CoinPack(
+        name=pack_in.name.strip(),
+        code=pack_in.code.strip(),
+        coins=pack_in.coins,
+        bonus_coins=pack_in.bonus_coins,
+        price_inr=pack_in.price_inr,
+        is_popular=pack_in.is_popular,
+        badge_text=pack_in.badge_text.strip() if pack_in.badge_text else None,
+        description=pack_in.description.strip() if pack_in.description else None,
+        sort_order=pack_in.sort_order,
+        is_active=pack_in.is_active
+    )
+    db.add(new_pack)
+    db.commit()
+    db.refresh(new_pack)
+    return new_pack
+
+
+@router.get("/admin/coin-packs/{id}", response_model=CoinPackResponse)
+def get_coin_pack_details(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Fetch single coin pack details by ID.
+    """
+    pack = db.get(CoinPack, id)
+    if not pack or pack.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coin pack not found.")
+    return pack
+
+
+@router.put("/admin/coin-packs/{id}", response_model=CoinPackResponse)
+def update_coin_pack(
+    id: UUID,
+    pack_in: CoinPackUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Update coin pack properties (price, coins, bonuses, badge, active status).
+    Any price or quantity changes immediately take effect for all subsequent orders.
+    """
+    pack = db.get(CoinPack, id)
+    if not pack or pack.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coin pack not found.")
+        
+    if pack_in.code is not None and pack_in.code.strip() != pack.code:
+        conflict = db.query(CoinPack).filter(
+            CoinPack.code == pack_in.code.strip(),
+            CoinPack.id != id,
+            CoinPack.is_deleted == False
+        ).first()
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Coin pack code '{pack_in.code}' is already in use by another pack."
+            )
+        pack.code = pack_in.code.strip()
+        
+    if pack_in.name is not None:
+        pack.name = pack_in.name.strip()
+    if pack_in.coins is not None:
+        pack.coins = pack_in.coins
+    if pack_in.bonus_coins is not None:
+        pack.bonus_coins = pack_in.bonus_coins
+    if pack_in.price_inr is not None:
+        pack.price_inr = pack_in.price_inr
+    if pack_in.is_popular is not None:
+        pack.is_popular = pack_in.is_popular
+    if pack_in.badge_text is not None:
+        pack.badge_text = pack_in.badge_text.strip() if pack_in.badge_text else None
+    if pack_in.description is not None:
+        pack.description = pack_in.description.strip() if pack_in.description else None
+    if pack_in.sort_order is not None:
+        pack.sort_order = pack_in.sort_order
+    if pack_in.is_active is not None:
+        pack.is_active = pack_in.is_active
+        
+    db.add(pack)
+    db.commit()
+    db.refresh(pack)
+    return pack
+
+
+@router.patch("/admin/coin-packs/{id}/toggle-status", response_model=CoinPackResponse)
+def toggle_coin_pack_status(
+    id: UUID,
+    is_active: Optional[bool] = None,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Quick-toggle active/inactive state of a coin pack.
+    """
+    pack = db.get(CoinPack, id)
+    if not pack or pack.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coin pack not found.")
+        
+    if is_active is None:
+        pack.is_active = not pack.is_active
+    else:
+        pack.is_active = is_active
+        
+    db.add(pack)
+    db.commit()
+    db.refresh(pack)
+    return pack
+
+
+@router.delete("/admin/coin-packs/{id}")
+def delete_coin_pack(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Soft delete a coin pack so past orders and ledger entries retain referential integrity.
+    """
+    pack = db.get(CoinPack, id)
+    if not pack or pack.is_deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coin pack not found.")
+        
+    pack.is_deleted = True
+    pack.is_active = False
+    db.add(pack)
+    db.commit()
+    return {"message": f"Coin pack '{pack.name}' deleted successfully."}
+
+
+@router.get("/admin/orders", response_model=PaginatedOrdersResponse)
+def get_admin_orders(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None, description="Filter by status (PENDING, SUCCESS, FAILED)"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Admin overview of all payment orders across users.
+    """
+    return get_paginated_orders(
+        db=db,
+        user_id=None,
+        page=page,
+        limit=limit,
+        status_filter=status
+    )
+
+
+@router.get("/admin/orders/{order_id}", response_model=PaymentOrderResponse)
+def get_admin_order_detail(
+    order_id: str,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Admin lookup for a specific order.
+    """
+    from app.services.payment_service import get_order_by_id
+    order = get_order_by_id(db, order_id_or_uuid=order_id, current_user=current_user)
+    return order
+
+
+# ==========================================
+# System Business Rules Configuration APIs (Task 6)
+# ==========================================
+
+@router.get("/admin/configs")
+def get_all_business_rules(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Returns all configurable system business rules with live DB values and defaults.
+    """
+    from app.services.config_service import list_all_admin_configs
+    return list_all_admin_configs(db)
+
+
+@router.put("/admin/configs")
+def update_business_rules(
+    updates: Dict[str, Any] = Body(...),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Updates business rule configurations with validation.
+    Applies immediately to subsequent operations without app release.
+    """
+    from app.services.config_service import update_multiple_configs, list_all_admin_configs
+    update_multiple_configs(db, updates)
+    return {
+        "message": "Business rules updated successfully.",
+        "configs": list_all_admin_configs(db)
+    }
+
+
+# ==========================================
+# Automated Reconciliation & Expiry Jobs (Task 8)
+# ==========================================
+
+@router.post("/admin/jobs/reconcile-pending-orders")
+def reconcile_pending_orders(
+    hours_threshold: int = Query(24, ge=1),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Reconciles stale pending orders. Orders pending longer than threshold are marked EXPIRED.
+    """
+    from app.models.payment_order import PaymentOrder, PaymentOrderStatus
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_threshold)
+    stale_orders = db.query(PaymentOrder).filter(
+        PaymentOrder.status == PaymentOrderStatus.pending.value,
+        PaymentOrder.created_at < cutoff
+    ).all()
+
+    count = 0
+    for o in stale_orders:
+        o.status = PaymentOrderStatus.expired.value
+        o.failure_reason = f"Payment order timed out after {hours_threshold} hours."
+        db.add(o)
+        count += 1
+
+    db.commit()
+    return {"message": f"Reconciled {count} expired pending orders.", "expired_count": count}
+
+
+@router.post("/admin/jobs/expire-earned-coins")
+def expire_earned_coins_job(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Evaluates earned coins expiry and debits expired promotional coins.
+    """
+    from app.models.coin_ledger import CoinLedger, CoinAction, CoinType
+    from app.services.config_service import get_config_value
+
+    expiry_days = int(get_config_value(db, "earned_coin_expiry_days", 90))
+    if expiry_days <= 0:
+        return {"message": "Earned coin expiration is disabled (expiry_days = 0).", "expired_users_count": 0}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=expiry_days)
+    
+    # Find all wallets that have earned coins
+    wallets = db.query(Wallet).filter(Wallet.earned_coins > 0).all()
+    expired_wallets_count = 0
+    total_coins_expired = 0
+
+    for w in wallets:
+        oldest_active_credit = db.query(CoinLedger).filter(
+            CoinLedger.wallet_id == w.id,
+            CoinLedger.action == CoinAction.credit.value,
+            CoinLedger.coin_type == CoinType.earned.value,
+            CoinLedger.created_at < cutoff
+        ).first()
+
+        if oldest_active_credit and w.earned_coins > 0:
+            expire_amount = w.earned_coins
+            w.earned_coins = 0
+            
+            entry = CoinLedger(
+                wallet_id=w.id,
+                user_id=w.user_id,
+                amount=expire_amount,
+                action=CoinAction.debit.value,
+                coin_type=CoinType.earned.value,
+                transaction_type="EXPIRED_COINS",
+                balance_purchased_after=w.purchased_coins,
+                balance_earned_after=w.earned_coins,
+                balance_total_after=w.total_coins,
+                description=f"Promotional earned coins expired after {expiry_days} days of inactivity"
+            )
+            db.add(w)
+            db.add(entry)
+            expired_wallets_count += 1
+            total_coins_expired += expire_amount
+
+    db.commit()
+    return {
+        "message": f"Processed coin expiry. Expired {total_coins_expired} earned coins across {expired_wallets_count} wallets.",
+        "expired_coins": total_coins_expired,
+        "affected_wallets": expired_wallets_count
+    }
 

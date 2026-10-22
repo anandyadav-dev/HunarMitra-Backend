@@ -18,6 +18,10 @@ from app.models.booking import Booking, BookingStatus
 from app.models.wallet import Wallet
 from app.models.service import Service
 from app.models.legal_document import LegalDocument
+from app.models.coin_pack import CoinPack
+from app.models.reward import Reward
+from app.models.config import SystemConfig
+from app.services.config_service import DEFAULT_COIN_CONFIGS
 
 def seed_database():
     db = SessionLocal()
@@ -362,6 +366,149 @@ def seed_database():
         else:
             terms_doc.content = terms_and_conditions_content
             db.commit()
+
+        # 10. Seed Default Coin Packs
+        coin_packs_data = [
+            {
+                "code": "pack_10",
+                "name": "10 Coins Pack",
+                "coins": 10,
+                "bonus_coins": 0,
+                "price_inr": Decimal("10.00"),
+                "is_popular": False,
+                "badge_text": None,
+                "description": "Essential coin pack to unlock worker contact",
+                "sort_order": 1,
+                "is_active": True
+            },
+            {
+                "code": "pack_30",
+                "name": "30 Coins Pack",
+                "coins": 30,
+                "bonus_coins": 0,
+                "price_inr": Decimal("25.00"),
+                "is_popular": False,
+                "badge_text": "Save ₹5",
+                "description": "Great for small repairs and multiple worker inquiries",
+                "sort_order": 2,
+                "is_active": True
+            },
+            {
+                "code": "pack_70",
+                "name": "70 Coins Pack",
+                "coins": 70,
+                "bonus_coins": 0,
+                "price_inr": Decimal("50.00"),
+                "is_popular": True,
+                "badge_text": "Most Popular",
+                "description": "Popular pack with big savings for homeowners",
+                "sort_order": 3,
+                "is_active": True
+            },
+            {
+                "code": "pack_150",
+                "name": "150 Coins Pack",
+                "coins": 150,
+                "bonus_coins": 0,
+                "price_inr": Decimal("100.00"),
+                "is_popular": False,
+                "badge_text": "Best Value",
+                "description": "Best value for contractors and frequent marketplace users",
+                "sort_order": 4,
+                "is_active": True
+            }
+        ]
+        # Deactivate old demo packs if present
+        old_codes = ["pack_starter", "pack_popular", "pack_value", "pack_pro"]
+        for oc in old_codes:
+            old_pack = db.query(CoinPack).filter(CoinPack.code == oc).first()
+            if old_pack:
+                old_pack.is_active = False
+                old_pack.is_deleted = True
+
+        for cpd in coin_packs_data:
+            cp = db.query(CoinPack).filter(CoinPack.code == cpd["code"]).first()
+            if not cp:
+                cp = CoinPack(**cpd)
+                db.add(cp)
+            else:
+                cp.coins = cpd["coins"]
+                cp.price_inr = cpd["price_inr"]
+                cp.name = cpd["name"]
+                cp.is_active = True
+                cp.is_deleted = False
+        db.commit()
+        print("Seeded Coin Packs successfully.")
+
+        # 11. Seed Default Rewards
+        rewards_data = [
+            {
+                "reward_code": "SIGNUP_BONUS",
+                "title": "Welcome Bonus",
+                "description": "Free welcome coins credited on new account registration",
+                "coins_amount": 20,
+                "max_claims_per_user": 1
+            },
+            {
+                "reward_code": "PROFILE_COMPLETION",
+                "title": "Profile Completion",
+                "description": "Reward for completing 100% of your account profile",
+                "coins_amount": 10,
+                "max_claims_per_user": 1
+            },
+            {
+                "reward_code": "FEEDBACK_REWARD",
+                "title": "Feedback Reward",
+                "description": "Earn coins for reviewing workers or engagement quality",
+                "coins_amount": 5,
+                "max_claims_per_user": 10
+            },
+            {
+                "reward_code": "REFERRAL_BONUS",
+                "title": "Referral Bonus",
+                "description": "Coins awarded when a friend registers using your invitation",
+                "coins_amount": 25,
+                "max_claims_per_user": 50
+            }
+        ]
+        for rd in rewards_data:
+            rew = db.query(Reward).filter(Reward.reward_code == rd["reward_code"]).first()
+            if not rew:
+                rew = Reward(**rd)
+                db.add(rew)
+        db.commit()
+        print("Seeded Rewards successfully.")
+
+        # 12. Seed Default System Configs
+        for key, item in DEFAULT_COIN_CONFIGS.items():
+            cfg = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+            if not cfg:
+                cfg = SystemConfig(
+                    key=key,
+                    value=item["value"],
+                    value_type=item["value_type"],
+                    category=item["category"],
+                    description=item["description"],
+                    is_public=item["is_public"]
+                )
+                db.add(cfg)
+        db.commit()
+        print("Seeded System Configurations successfully.")
+
+        # 13. Ensure existing user wallets have coins initialized
+        all_wallets = db.query(Wallet).all()
+        for w in all_wallets:
+            updated = False
+            if w.purchased_coins is None:
+                w.purchased_coins = 0
+                updated = True
+            if w.earned_coins is None or (w.earned_coins == 0 and w.purchased_coins == 0):
+                w.earned_coins = 20  # Give demo/seeded users the 20 signup bonus coins
+                updated = True
+            if updated:
+                db.add(w)
+        db.commit()
+        print("Synchronized existing user wallet coins.")
 
         db.commit()
         print("Database Seeding Completed Successfully!")
